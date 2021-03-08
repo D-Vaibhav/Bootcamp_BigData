@@ -1,0 +1,225 @@
+						Hadoop Anatomy (by: VAIBHAV DWIVEDI)
+
+			<final> screw it let's DO IT ¯\_(ツ)_/¯, hold firm and don't forgot to change </final>
+==================================================================================================================================
+
+- distributed file system(dfs) (not a complete application)
+
+- hadoop cmd can be used from anywhere from it's host machine
+
+- to lists all Java processes running on local machine.
+	$ sudo jps
+
+- ResourceManager UI (displays information about the applications that have been executed on your Hadoop cluster)
+	http://localhost:8088
+
+- Job History UI (shows the jobs that have executed on your cluster)
+	http://localhost:19888
+
+- When you are going to ingest a data in Hadoop, Hadoop is going to apply a block size on the data accordingly results blocks
+
+- it has 3 main components:
+	#1. HDFS 
+		- primary deal with the storage part (in ETL, Extract part)
+		
+		- has two daemons processes
+			#1.1) nameNode 
+				- Master (entry point to the DN)
+				- http://localhost:50070
+				- $ hdfs dfs -D dfs.blocksize=1048576 -put stocks.csv
+					- handle block creation and blocks stays on localhost's memory
+
+				- $ hdfs fsck /user/cloudera/stocks.csv -files -blocks -locations 
+					- with fsck we have to use absolute path
+					- to see blocks (named as: blk_1073743130_2306)
+					- $ sudo find / -type f -name blk_1073743130
+
+			#1.2) dataNode 
+				- Worker
+				- http://localhost:50075
+				- actual data stays here
+				- replication responsibility is on dataNode(after getting the node) 
+				  and also they calculate checksum and verified it with recieved checksum value
+
+		- to access any DN we have to go through it's respective NN (ie. acts as entry point) called client request
+		  but if in case it's other way around it's called PROXY client request
+			- $ ssh data_node_name       (cmd from it's NN)	
+
+		- has shells like dfs, dfsadmin, fsck to operate/manage hdfs's storage ($ hdfs dfs -cmd)
+			- $ hdfs dfs -ls
+			- $ hdfs dfsadmin -report   (to get cluster details)
+
+	#2. mapReduce
+		- processing aspect in hadoop cluster
+
+		- in mR process map and reduce may be runnning on different-different DN. hence they can run parallel
+
+		- mainly three processes (in sequence): 
+			#2.1) map process (taken care by java code)
+				- mapper came in action and generate key-value pair (<key, 1>)
+
+			#2.2) suffle and sort
+				- merges key-value pair from all the DN whose key are same (hence key-list_of_values)
+
+			#2.3) reduce process (taken care by java code)
+				- all records having the same key are handled by the same reducer (key specific reducer)
+				- a reducer can handle multiple keys		
+
+
+	#3. YARN
+		- Cluster Resource Management service
+		
+		- has two daemons processes
+			#3.1) resource_Manager 
+				- Master
+			#3.2) node_Manager 
+				- Worker 
+
+
+
+		-
+			$ yarn jar wordcount.jar wordcount.WordCountJob -D mapreduce.job.reduces=2 constitution.txt wordcount_infocepts1
+			     jar_name	    pkg.entry_class	  setting_no_of_reducers   ---- params (filename, o/p_dir)------
+
+		- number of files created = number of reducers
+
+
+
+
+
+
+facts
+--------
+- the way we are using hadoop (ie. all in single machine) is called psudo-distributed mode deployment, 
+  while in production environment we use distributed mode (everthing is loosely coupled hence has it's own separate machine)
+
+- each H/W machine in hadoop cluster is having processing (Processor + RAM) as well as storage capability (Disc)
+
+- hadoop default location(home) is
+	 $ hdfs dfs -ls /user/cloudera 		ie. equivalent to	$ hdfs dfs -ls
+
+- thick client is the machine which has hadoop library installed (to check library use: $ sudo jps)
+
+- to search anthing for any change either search in HDFS, MapReduce, YARN and use their default files
+  like:
+	xxx-default.xml : default configuration file
+	xxx-site.xml : the overridden file (over-riding it's respective default file)
+	
+	- and all these can be overridden via -D flag (via cmd line) or via <final>...</final> in <property> tag (via config file)
+	- eg:
+		$ hdfs dfs -D dfs.blocksize=1048576 -put stocks.csv
+		$ yarn jar wordcount.jar wordcount.WordCountJob -D mapreduce.job.reduces=2 constitution.txt wordcount_infocepts1
+			     jar_name	    pkg.entry_class	  setting_no_of_reducers   ---- params (filename, o/p_dir)------
+
+- all the software cofinguration can be seen in /etc folder
+
+- we can control number of mapper at the time Extract process (moving data to hadoop's dfs) and afterwards we can't
+  and we can control reducers (running mapper) at the time of processing (using yarn cmd) and by default there is only one reducer per block
+
+- we can control mapper at the time of Extraction but with processing part (YARN) we can only control Reducer not mapper (1 mapper per block (=128MB))
+
+- merging files
+	$ hdfs dfs -getmerge test /tmp/merged_data_and_smallBlocks
+
+	(here is the hdfs's dir. where our files data, smallBlocks are present), (and last parameter is location in local machine)
+
+- to check file details use:
+	$ wc --help
+
+- To achieve fault tolearance hadoop uses replication factor
+	say default value for replication factor is 3.
+	After applying replication factor there will be  2 * 3 blocks.
+	DN1(1 TB) = Block1, Block2(R)
+	DN2(1 TB) = Block2, Block1(R) (Crashed)
+	DN3(1 TB) = Block1(R), Block2(R)
+
+
+lab manual
+-------------
+- Data in HDFS is chunked into blocks and copied to various nodes in the cluster. If a particular block does not have enough copies,
+  it is referred to as “under replicated.”
+
+
+instructions
+--------------
+- kickstart
+	windows -> staging_area (windows shared folder) --> linux area (cd ~/pigandhive/labs/) ---> hdfs home 
+
+
+putting data to hadoop cluster
+==================================
+#1. using dfs put command
+-----------------------------
+	- $ dhfs dfs -put local_storage_file_name
+
+	- $ dhfs dfs -D dfs.blocksize=1m -put local_storage_file_name
+		- use k:KB, m:MB, g:GB
+
+	- to get data out from hadoop's cluster back to local_machine_memory
+		- $ hdfs dfs -get hadoop_file local_machine_destination_dir
+
+
+#2. using WEBHDFS 
+--------------------
+	- ie. cmds to automate hdfs dfs -commands over http requests
+
+	1) Following HTTP GET request List a Directory /user/cloudera
+	curl -i "http://quickstart.cloudera:50070/webhdfs/v1/user/cloudera?op=LISTSTATUS"
+
+
+	2) Following HTTP GET request Open and Read a File /user/cloudera/stocks.csv
+	curl -i -L "http://quickstart.cloudera:50070/webhdfs/v1/user/cloudera/stocks.csv?op=OPEN"
+
+
+	3) The following PUT request makes a new directory in HDFS named /user/cloudera/data:
+	curl -i -X PUT "http://quickstart.cloudera:50070/webhdfs/v1/user/cloudera/data?user.name=cloudera&op=MKDIRS"
+
+
+	4) //Below is a command to write the file on hdfs using single curl command instead of 2 commands
+	cd /home/cloudera/labs/demos //Assuming that there is small_blocks.txt
+	curl -i -X PUT -T small_blocks.txt  "http://quickstart.cloudera:50075/webhdfs/v1/user/cloudera/small_blocks.txt?op=CREATE&user.name=cloudera&namenoderpcaddress=quickstart.cloudera:8020&overwrite=false"
+	
+		- here we are requesting DN inorder to make a POST req, which cross check with the NN (proxy client request via DN (ie. 50075))
+		- will get completed in two consecutive requests (first req. made to the DN)
+
+ 
+#3. injecting data via .jar file
+-----------------------------------
+- making project ready and jar creation
+	- file -> new -> java project
+	- add a new package inside src folder (all the .java files must have it's respective package)
+	- add java code to the eclipe project's src package (use package property PATH and LOCATION and put .java file inside)
+	- edit file package or class (if required)
+	- building path so to remove errors(for complete project or add accordingly)
+		- Build path -> configure build path -> Java Build Path + Libraries (tab) -> Add External JAR's
+		- if we want to add hadoop related JAR's (add accordingly)
+		  in File System go to : usr/lib/hadoop/client
+
+	- now creating jar out of the projet(exporting)
+		- export -> java -> JAR file -> browse_destination/jar_name.jar (cloudera/pigandhive/labs/respective_dir)
+
+	- running jar file (here specifically to inject data to the hadoop's cluster)
+		- yarn is the cmd line tool used for any of the hadoop's cluster management part
+		- $ yarn jar path/jar_name pkg.entry_class -m 3
+			- three is the default value for the mapper (but yarn accept -m only in Extract process ie. data injection to the hadoop cluster)
+
+#3.1 injecting relational data(tables) using tool: sqoop
+------------------------------------------------------------	
+- logging into mysql
+	- $ mysql -u root -p
+	- password: cloudera
+	- > show databases;
+	  > use test;
+	  > show tables;
+	  > desc salaries; 
+	  > select * from salaries;
+
+1) Import the Table into HDFS
+sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/test --driver com.mysql.jdbc.Driver --username root -password cloudera --table salaries
+												----------- creds -----------------
+2) Specify Columns to Import
+sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/test --driver com.mysql.jdbc.Driver --username root -password cloudera --table salaries --columns salary,age -m 1 --target-dir salaries2
+
+3) Importing from a Query
+sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/test --driver com.mysql.jdbc.Driver --username root --password cloudera --query "select * from salaries s where s.salary > 90000.00 and \$CONDITIONS" --split-by gender -m 2 --target-dir salaries3
+																     ------------ query ---------------------------------------  ------- must be included ----------	
